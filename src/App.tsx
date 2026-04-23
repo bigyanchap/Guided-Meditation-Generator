@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
-import { Film, Wind, AlertTriangle, RefreshCw, Sun, Moon, Settings, Eye, EyeOff } from 'lucide-react';
+import { Film, Wind, AlertTriangle, RefreshCw, Sun, Moon, Settings, Eye, EyeOff, Github, Coffee } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import MeditationGenerator from './MeditationGenerator';
 import VideoGenerator from './VideoGenerator';
@@ -98,14 +98,14 @@ const GEMINI_TTS_VOICES: Record<string, string> = {
 };
 
 const PAID_TTS_VOICES = [
-  { id: 'in_m_whisper', label: 'Indian male deep, whispering' },
-  { id: 'in_m_commanding', label: 'Indian male deep, commanding' },
-  { id: 'in_f_whisper', label: 'Indian female deep, whispering' },
-  { id: 'in_f_commanding', label: 'Indian female deep, commanding' },
-  { id: 'us_m_whisper', label: 'American male deep, whispering' },
-  { id: 'us_m_commanding', label: 'American male deep, commanding' },
-  { id: 'us_f_whisper', label: 'American female deep, whispering' },
-  { id: 'us_f_commanding', label: 'American female deep, commanding' },
+  { id: 'in_f_whisper', label: 'Indian accent, female, deep, whispery' },
+  { id: 'in_f_commanding', label: 'Indian accent, female, deep, persuasive' },
+  { id: 'in_m_whisper', label: 'Indian accent, male, deep, whispery' },
+  { id: 'in_m_commanding', label: 'Indian accent, male, deep, persuasive' },
+  { id: 'us_f_whisper', label: 'American English, female, deep, whispery' },
+  { id: 'us_f_commanding', label: 'American English, female, deep, persuasive' },
+  { id: 'us_m_whisper', label: 'American English, male, deep, whispery' },
+  { id: 'us_m_commanding', label: 'American English, male, deep, persuasive' },
 ] as const;
 
 const FREE_TTS_VOICES = [
@@ -629,7 +629,7 @@ export default function App() {
           </button>
         ))}
 
-        <div className="mt-auto mb-2 flex flex-col items-center gap-0.5">
+        <div className="mt-auto mb-2 flex flex-col items-center gap-1">
           <button
             onClick={goToSettings}
             title="Settings"
@@ -641,7 +641,26 @@ export default function App() {
           >
             <Settings size={13} strokeWidth={1.5} />
           </button>
+          <a
+            href="https://github.com/bigyanchap/Guided-Meditation-Generator"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="GitHub repository"
+            className="w-7 h-7 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <Github size={13} strokeWidth={1.5} />
+          </a>
+          <a
+            href="https://buymeacoffee.com/bigyanchap"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Support on Buy Me a Coffee"
+            className="w-7 h-7 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <Coffee size={13} strokeWidth={1.5} />
+          </a>
           <button
+            type="button"
             onClick={toggleTheme}
             title={theme === 'light' ? 'Dark mode' : 'Light mode'}
             className="w-7 h-7 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
