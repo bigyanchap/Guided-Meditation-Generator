@@ -313,12 +313,19 @@ export default function MeditationGenerator({
   const iastifyInfoWrapRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generateAbortRef = useRef<AbortController | null>(null);
+  /** Always read latest pace in play handlers (avoids stale closures on `onended` / pause timers). */
+  const paceRef = useRef(pace);
+  paceRef.current = pace;
 
   useEffect(() => {
     const el = document.createElement('audio');
     audioRef.current = el;
     return () => { el.pause(); el.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = pace;
+  }, [pace]);
 
   useEffect(() => () => { generateAbortRef.current?.abort(); }, []);
 
@@ -432,10 +439,12 @@ export default function MeditationGenerator({
     setProgress((index / segments.length) * 100);
     if (segment.type === 'text' && segment.audioUrl) {
       if (audioRef.current) {
-        audioRef.current.src = segment.audioUrl;
-        audioRef.current.playbackRate = pace;
-        audioRef.current.muted = isMuted;
-        audioRef.current.play().catch(e => console.error('Playback failed:', e));
+        const el = audioRef.current;
+        el.onloadedmetadata = () => { el.playbackRate = paceRef.current; };
+        el.src = segment.audioUrl;
+        el.playbackRate = paceRef.current;
+        el.muted = isMuted;
+        el.play().catch(e => console.error('Playback failed:', e));
       }
     } else if (segment.type === 'pause' && segment.duration) {
       setTimeout(() => { if (isPlaying) playNext(index + 1); }, segment.duration * 1000);
@@ -449,7 +458,10 @@ export default function MeditationGenerator({
     if (segments.length === 0) return;
     setIsPlaying(true);
     if (currentSegmentIndex === -1) { playNext(0); }
-    else if (segments[currentSegmentIndex].type === 'text' && audioRef.current) { audioRef.current.play(); }
+    else if (segments[currentSegmentIndex].type === 'text' && audioRef.current) {
+      audioRef.current.playbackRate = paceRef.current;
+      audioRef.current.play();
+    }
     else { playNext(currentSegmentIndex); }
   };
 

@@ -109,8 +109,8 @@ const PAID_TTS_VOICES = [
 ] as const;
 
 const FREE_TTS_VOICES = [
-  { id: 'af_heart', label: 'Heart (US F)' },
   { id: 'af_bella', label: 'Bella (US F)' },
+  { id: 'af_heart', label: 'Heart (US F)' },
   { id: 'af_sky', label: 'Sky (US F)' },
   { id: 'am_adam', label: 'Adam (US M)' },
   { id: 'am_michael', label: 'Michael (US M)' },
@@ -193,7 +193,7 @@ export default function App() {
   const pageBeforeSettingsRef = useRef<Page | null>(null);
 
   const [segments, setSegments] = useState<Segment[]>([]);
-  const [title, setTitle] = useState('ZenGM - Guided Meditation Generator');
+  const [title, setTitle] = useState('Guided Meditation 1');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -569,7 +569,7 @@ export default function App() {
                   : <Wind size={24} strokeWidth={1} className="text-[var(--text-muted)]" />}
               </div>
 
-              <h1 className="text-2xl font-light tracking-tight mb-1">Dhyāna</h1>
+              <h1 className="text-2xl font-light tracking-tight mb-1">ZenGM - Guided Meditation Generator</h1>
               <p className="text-[var(--text-muted)] text-xs mb-8">Loading voice model</p>
 
               {modelStatus === 'loading' && (
@@ -690,7 +690,7 @@ export default function App() {
           />
         )}
         {activePage === 'video' && (
-          <VideoGenerator segments={segments} title={title} />
+          <VideoGenerator segments={segments} title={title} onGoToMeditation={() => setActivePage('meditation')} />
         )}
         {activePage === 'settings' && settingsDraft && (
           <div className="h-full overflow-y-auto px-6 py-5">
