@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Play, Pause, RotateCcw, Download, Volume2, VolumeX,
-  Loader2, Leaf, Flower2, Film, X,
+  Loader2, Leaf, Flower2, Film, X, Info,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from './audio-utils';
 import { mergeSegmentsToBuffer, bufferToWav } from './audio-utils';
+import { sanitizeLlmErrorMessage } from './llm-iastify';
 
 interface Props {
   segments: Segment[];
@@ -16,26 +17,25 @@ interface Props {
   setIsGenerating: (b: boolean) => void;
   modelStatus: 'loading' | 'ready' | 'error';
   generateSegment: (text: string, voice: string, opts?: { signal?: AbortSignal }) => Promise<Blob>;
+  hasLlmApiKey: boolean;
+  iastifyScript: (script: string) => Promise<string>;
+  onOpenSettings: () => void;
   onCreateVideo: () => void;
+  voices: ReadonlyArray<{ id: string; label: string }>;
 }
 
-const VOICES = [
-  { id: 'af_heart', label: 'Heart (US F)' },
-  { id: 'af_bella', label: 'Bella (US F)' },
-  { id: 'af_sky', label: 'Sky (US F)' },
-  { id: 'am_adam', label: 'Adam (US M)' },
-  { id: 'am_michael', label: 'Michael (US M)' },
-  { id: 'bf_emma', label: 'Emma (UK F)' },
-  { id: 'bm_george', label: 'George (UK M)' },
-];
+const IASTIFY_TOOLTIP =
+  'Sanskrit words in the script are converted to IAST (International Alphabet of Sanskrit Transliteration) using your LLM API key in the Settings.';
 
 const DEFAULT_SCRIPT = `Guided meditation for Software Engineers...
-
-Namaste and Welcome.
+Om Namah Shivaya.
+Namaste and Welcome. 
 Close all screens if you haven't already.
 
 Silence your phone.
+`;
 
+/*
 Sit comfortably on a chair or on the floor. (5)
 Keep your spine erect but not too rigid. (5)
 Keep your chin slightly up. (5)
@@ -256,7 +256,9 @@ Do not carry work into your nerves.
 
 Thank You for doing this Meditation with us.
 
-Namaste.`;
+Namaste.
+*/
+
 
 function meditationAbortError(): DOMException {
   return new DOMException('Generation cancelled', 'AbortError');
@@ -267,18 +269,46 @@ function isAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
+function formatDetailedError(context: string, err: unknown): string {
+  const toLines = (raw: string): string[] => raw.split('\n').map(s => s.trim()).filter(Boolean);
+  const base = err instanceof Error ? err.message : String(err);
+  const lines = [
+    `${context} failed.`,
+    '',
+    `Details: ${sanitizeLlmErrorMessage(base || 'Unknown error')}`,
+  ];
+  if (err instanceof Error && err.stack) {
+    const stackPreview = toLines(err.stack).slice(0, 3).join('\n');
+    if (stackPreview) {
+      lines.push('', 'Trace:', stackPreview);
+    }
+  }
+  lines.push(
+    '',
+    'Tip: make sure every text segment has generated audio before downloading.',
+  );
+  return lines.join('\n');
+}
+
 export default function MeditationGenerator({
   segments, setSegments, title, setTitle,
   isGenerating, setIsGenerating, modelStatus,
-  generateSegment, onCreateVideo,
+  generateSegment, hasLlmApiKey, iastifyScript, onOpenSettings, onCreateVideo, voices,
 }: Props) {
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [pace, setPace] = useState(0.8);
-  const [selectedVoice, setSelectedVoice] = useState('am_michael');
+  const [selectedVoice, setSelectedVoice] = useState('af_heart');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [isIastifying, setIsIastifying] = useState(false);
+  const [showLlmKeyDialog, setShowLlmKeyDialog] = useState(false);
+  const [iastifyInfoOpen, setIastifyInfoOpen] = useState(false);
+  const [iastifyErrorText, setIastifyErrorText] = useState<string | null>(null);
+  const [generationErrorText, setGenerationErrorText] = useState<string | null>(null);
+  const [downloadErrorText, setDownloadErrorText] = useState<string | null>(null);
+  const iastifyInfoWrapRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generateAbortRef = useRef<AbortController | null>(null);
 
@@ -289,6 +319,23 @@ export default function MeditationGenerator({
   }, []);
 
   useEffect(() => () => { generateAbortRef.current?.abort(); }, []);
+
+  useEffect(() => {
+    if (!voices.length) return;
+    if (!voices.some(v => v.id === selectedVoice)) {
+      setSelectedVoice(voices[0].id);
+    }
+  }, [voices, selectedVoice]);
+
+  useEffect(() => {
+    if (!iastifyInfoOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = iastifyInfoWrapRef.current;
+      if (el && !el.contains(e.target as Node)) setIastifyInfoOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [iastifyInfoOpen]);
 
   const parseText = (input: string): Segment[] => {
     const lines = input.split(/\n/);
@@ -354,7 +401,21 @@ export default function MeditationGenerator({
       } else {
         console.error('Generation failed:', error);
         const message = error instanceof Error ? error.message : String(error);
-        alert(`Generation failed: ${message}`);
+        setGenerationErrorText(sanitizeLlmErrorMessage(message));
+        ac.abort();
+        setSegments(prev => {
+          for (const s of prev) {
+            if (s.type === 'text' && s.audioUrl?.startsWith('blob:')) {
+              URL.revokeObjectURL(s.audioUrl);
+            }
+          }
+          return parsedSegments.map(s => ({ ...s, isGenerating: false }));
+        });
+        reset();
+        if (audioRef.current) {
+          audioRef.current.removeAttribute('src');
+          audioRef.current.load();
+        }
       }
     } finally {
       generateAbortRef.current = null;
@@ -410,7 +471,26 @@ export default function MeditationGenerator({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
-      alert('Failed to merge audio for download.');
+      setDownloadErrorText(formatDetailedError('Download merge', err));
+    }
+  };
+
+  const handleIastify = async () => {
+    if (!hasLlmApiKey) {
+      setShowLlmKeyDialog(true);
+      return;
+    }
+    if (!text.trim()) return;
+    setIsIastifying(true);
+    try {
+      const transliterated = await iastifyScript(text);
+      setText(transliterated);
+    } catch (err: unknown) {
+      console.error('IASTify failed:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      setIastifyErrorText(sanitizeLlmErrorMessage(message));
+    } finally {
+      setIsIastifying(false);
     }
   };
 
@@ -449,7 +529,7 @@ export default function MeditationGenerator({
               onChange={e => setSelectedVoice(e.target.value)}
               className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded px-3 py-1.5 text-sm outline-none focus:border-[var(--border-strong)] transition"
             >
-              {VOICES.map(v => <option key={v.id} value={v.id} className="bg-[var(--option-bg)]">{v.label}</option>)}
+              {voices.map(v => <option key={v.id} value={v.id} className="bg-[var(--option-bg)]">{v.label}</option>)}
             </select>
           </div>
           <div className="w-32">
@@ -482,12 +562,48 @@ export default function MeditationGenerator({
           <span><span className="text-[var(--accent)]">(n) is n secs </span></span>
         </div>
 
-        {/* Generate */}
-        <div className="flex items-center gap-2">
+        {/* IASTify + Generate */}
+        <div className="flex items-center gap-2 pt-1">
+          <div ref={iastifyInfoWrapRef} className="relative inline-block shrink-0 mr-6">
+            <button
+              type="button"
+              onClick={handleIastify}
+              disabled={isIastifying || isGenerating || !text.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {isIastifying ? <Loader2 size={12} className="animate-spin" /> : null}
+              {isIastifying ? 'IASTifying...' : 'IASTify'}
+            </button>
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                setIastifyInfoOpen(v => !v);
+              }}
+              aria-expanded={iastifyInfoOpen}
+              aria-label="What is IASTify?"
+              className="absolute -right-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-muted)] shadow-sm hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] transition"
+            >
+              <Info size={11} strokeWidth={2} />
+            </button>
+            {iastifyInfoOpen && (
+              <div
+                className="absolute left-0 top-full z-20 mt-1.5 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-[var(--border)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--text-secondary)] shadow-lg"
+                style={{
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(12px) saturate(1.2)',
+                  WebkitBackdropFilter: 'blur(12px) saturate(1.2)',
+                }}
+                role="tooltip"
+              >
+                {IASTIFY_TOOLTIP}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={generateAudio}
-            disabled={isGenerating || !text.trim() || modelStatus !== 'ready'}
+            disabled={isGenerating || isIastifying || !text.trim() || modelStatus !== 'ready'}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {isGenerating ? <Loader2 size={12} className="animate-spin" /> : null}
@@ -591,6 +707,203 @@ export default function MeditationGenerator({
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showLlmKeyDialog && (
+          <motion.div
+            key="iastify-llm-dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowLlmKeyDialog(false)}
+            style={{ background: 'var(--overlay-bg)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-xl border border-[var(--border)] shadow-2xl overflow-hidden"
+              style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(40px) saturate(1.4)',
+                WebkitBackdropFilter: 'blur(40px) saturate(1.4)',
+              }}
+            >
+              <div className="px-5 pt-4 pb-3">
+                <h3 className="text-sm font-medium mb-2">LLM API key required</h3>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  IASTify needs a chat-capable key. Add an LLM key in Settings, or use paid TTS with an OpenAI, Google, or Hugging Face key (you can leave LLM empty to reuse the same key).
+                </p>
+              </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLlmKeyDialog(false)}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border)] rounded hover:bg-[var(--bg-hover)] transition"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLlmKeyDialog(false);
+                    onOpenSettings();
+                  }}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition font-medium"
+                >
+                  Open Settings
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {downloadErrorText && (
+          <motion.div
+            key="download-error-dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setDownloadErrorText(null)}
+            style={{ background: 'var(--overlay-bg)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-lg max-h-[min(85vh,32rem)] flex flex-col rounded-xl border border-[var(--border)] shadow-2xl overflow-hidden"
+              style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(40px) saturate(1.4)',
+                WebkitBackdropFilter: 'blur(40px) saturate(1.4)',
+              }}
+            >
+              <div className="px-5 pt-4 pb-3 min-h-0 overflow-y-auto">
+                <h3 className="text-sm font-medium mb-2">Download failed</h3>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap break-words">
+                  {downloadErrorText}
+                </p>
+              </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDownloadErrorText(null)}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition font-medium"
+                >
+                  OK
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {generationErrorText && (
+          <motion.div
+            key="generation-error-dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setGenerationErrorText(null)}
+            style={{ background: 'var(--overlay-bg)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-lg max-h-[min(85vh,32rem)] flex flex-col rounded-xl border border-[var(--border)] shadow-2xl overflow-hidden"
+              style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(40px) saturate(1.4)',
+                WebkitBackdropFilter: 'blur(40px) saturate(1.4)',
+              }}
+            >
+              <div className="px-5 pt-4 pb-3 min-h-0 overflow-y-auto">
+                <h3 className="text-sm font-medium mb-2">Generation failed</h3>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap break-words">
+                  {generationErrorText}
+                </p>
+              </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setGenerationErrorText(null)}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition font-medium"
+                >
+                  OK
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {iastifyErrorText && (
+          <motion.div
+            key="iastify-error-dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setIastifyErrorText(null)}
+            style={{ background: 'var(--overlay-bg)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-lg max-h-[min(85vh,32rem)] flex flex-col rounded-xl border border-[var(--border)] shadow-2xl overflow-hidden"
+              style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(40px) saturate(1.4)',
+                WebkitBackdropFilter: 'blur(40px) saturate(1.4)',
+              }}
+            >
+              <div className="px-5 pt-4 pb-3 min-h-0 overflow-y-auto">
+                <h3 className="text-sm font-medium mb-2">IASTify failed</h3>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap break-words">
+                  {iastifyErrorText}
+                </p>
+              </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setIastifyErrorText(null); onOpenSettings(); }}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border)] rounded hover:bg-[var(--bg-hover)] transition"
+                >
+                  Open Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIastifyErrorText(null)}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-strong)] rounded hover:bg-[var(--bg-active)] transition font-medium"
+                >
+                  OK
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -12,7 +12,7 @@
   --text-muted: #aaa;
   --border: rgba(0,0,0,0.08);
   --border-strong: rgba(0,0,0,0.14);
-  --accent: #D4956A;
+  --accent: #d27435;
   --accent-bg: rgba(212,149,106,0.12);
   --scrollbar-thumb: rgba(0,0,0,0.1);
   --scrollbar-hover: rgba(0,0,0,0.2);
@@ -23,6 +23,15 @@
   --glass-indicator: linear-gradient(135deg, rgba(212,149,106,0.25), rgba(212,149,106,0.1));
   --glass-indicator-border: rgba(212,149,106,0.35);
   --overlay-bg: rgba(0,0,0,0.25);
+}
+
+/* Ensure text fields show a visible caret and allow selection (app root uses select-none). */
+input,
+textarea {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 [data-theme="dark"] {

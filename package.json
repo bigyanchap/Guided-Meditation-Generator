@@ -2,7 +2,7 @@
   "name": "dhyana-meditation",
   "private": true,
   "version": "1.0.0",
-  "description": "Zen for Engineers - Guided Meditation with Local TTS",
+  "description": "ZenGM - Guided Meditation Generator",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "com.dhyana.meditation",
-    "productName": "Dhyana",
+    "productName": "ZenGM - Guided Meditation Generator",
     "directories": {
       "output": "release"
     },

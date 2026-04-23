@@ -1,7 +1,7 @@
-# Zen for Engineers - App Summary
+# ZenGM - Guided Meditation Generator - App Summary
 
 ## Overview
-Zen for Engineers is a specialized guided meditation application designed specifically for software engineers. It helps users disconnect from the "mental tabs" of deadlines, bugs, and unfinished tasks to find clarity and calm in their work.
+ZenGM - Guided Meditation Generator is a specialized guided meditation application designed specifically for software engineers. It helps users disconnect from the "mental tabs" of deadlines, bugs, and unfinished tasks to find clarity and calm in their work.
 
 ## Key Features
 - **Specialized Script**: A default meditation script tailored to the engineering mindset (coding, optimization, performance).
