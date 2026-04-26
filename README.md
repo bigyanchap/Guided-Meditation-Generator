@@ -70,4 +70,4 @@ npm run dev
 Local TTS runs entirely on your device. If you enable paid TTS, only **your** API provider receives the text you send for synthesis, under that provider’s terms.
 
 ## Standalone Release 
-Coming Soon
+Release has files which you need to download and run the installer named GenGM - Guided Meditation Generator Setup 1.0.0.exe

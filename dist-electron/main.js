@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net } from 'electron';
+import { app, BrowserWindow, ipcMain, net, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +29,23 @@ function assertNetFetchUrl(urlString) {
         throw new Error(`Blocked fetch host: ${host}`);
     }
 }
+function assertOpenExternalUrl(urlString) {
+    let u;
+    try {
+        u = new URL(urlString);
+    }
+    catch {
+        throw new Error('Invalid URL');
+    }
+    const p = u.protocol.toLowerCase();
+    if (p !== 'https:' && p !== 'http:') {
+        throw new Error('Only http(s) links can be opened in the browser');
+    }
+}
+ipcMain.handle('open-external', async (_event, url) => {
+    assertOpenExternalUrl(url);
+    await shell.openExternal(url);
+});
 ipcMain.handle('electron-net-fetch', async (_event, payload) => {
     assertNetFetchUrl(payload.url);
     const res = await net.fetch(payload.url, {
@@ -70,6 +87,13 @@ function createWindow() {
     else {
         win.loadFile(path.join(__dirname, '../dist/index.html'));
     }
+    win.webContents.setWindowOpenHandler((details) => {
+        const url = details.url;
+        if (url.startsWith('https:') || url.startsWith('http:')) {
+            void shell.openExternal(url);
+        }
+        return { action: 'deny' };
+    });
 }
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {

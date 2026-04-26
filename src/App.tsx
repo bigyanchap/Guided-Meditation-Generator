@@ -563,12 +563,12 @@ export default function App() {
             className="fixed inset-0 z-50 bg-[var(--splash-bg)] flex items-center justify-center"
           >
             <div className="flex flex-col items-center text-center px-6 max-w-sm w-full">
-              <div className="w-16 h-16 rounded-full border border-[var(--border)] flex items-center justify-center mb-6">
-                {modelStatus === 'error'
-                  ? <AlertTriangle size={24} className="text-red-400" />
-                  : <Wind size={24} strokeWidth={1} className="text-[var(--text-muted)]" />}
-              </div>
-
+              <img
+                src="/logo.png"
+                alt="ZenGM logo"
+                className="w-20 h-20 object-contain mb-5 drop-shadow-sm rounded-full border border-[var(--border)]"
+              />
+              <br/>
               <h1 className="text-2xl font-light tracking-tight mb-1">ZenGM - Guided Meditation Generator</h1>
               <p className="text-[var(--text-muted)] text-xs mb-8">Loading voice model</p>
 
@@ -614,6 +614,7 @@ export default function App() {
 
       {/* Sidebar */}
       <nav className="w-11 shrink-0 bg-[var(--bg-sidebar)] border-r border-[var(--border)] flex flex-col items-center pt-2.5 gap-0.5">
+        
         {sidebarItems.map(item => (
           <button
             key={item.id}
@@ -647,6 +648,12 @@ export default function App() {
             rel="noopener noreferrer"
             title="GitHub repository"
             className="w-7 h-7 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+            onClick={(e) => {
+              if (window.electronAPI) {
+                e.preventDefault();
+                void window.electronAPI.openExternal('https://github.com/bigyanchap/Guided-Meditation-Generator');
+              }
+            }}
           >
             <Github size={13} strokeWidth={1.5} />
           </a>
@@ -656,6 +663,12 @@ export default function App() {
             rel="noopener noreferrer"
             title="Support on Buy Me a Coffee"
             className="w-7 h-7 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+            onClick={(e) => {
+              if (window.electronAPI) {
+                e.preventDefault();
+                void window.electronAPI.openExternal('https://buymeacoffee.com/bigyanchap');
+              }
+            }}
           >
             <Coffee size={13} strokeWidth={1.5} />
           </a>

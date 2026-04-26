@@ -14,7 +14,10 @@
     "lint": "tsc --noEmit",
     "check-secrets": "node scripts/verify-no-secrets.mjs",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "standalone": "npm run dist",
+    "standalone:unpacked": "npm run build && electron-builder --dir",
+    "icon:generate": "node -e \"import pngToIco from 'png-to-ico'; import { writeFile } from 'node:fs/promises'; const buf = await pngToIco('public/logo.png'); await writeFile('build/icon.ico', buf); console.log('generated build/icon.ico');\""
   },
   "build": {
     "appId": "com.dhyana.meditation",
@@ -30,7 +33,7 @@
       "target": [
         "nsis"
       ],
-      "icon": null
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -55,6 +58,7 @@
     "concurrently": "^9.1.2",
     "electron": "^35.2.1",
     "electron-builder": "^26.0.12",
+    "png-to-ico": "^3.0.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

@@ -15,6 +15,8 @@ export type ElectronNetFetchResult = {
 
 export type ElectronAPI = {
   isElectron: true;
+  /** Opens a URL in the system default browser (not an in-app window). */
+  openExternal: (url: string) => Promise<void>;
   netFetch: (req: ElectronNetFetchRequest) => Promise<ElectronNetFetchResult>;
 };
 
