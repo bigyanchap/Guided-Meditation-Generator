@@ -7,6 +7,9 @@ coverage/
 .DS_Store
 *.log
 
+# Local vibevoice.cpp checkout, portable cmake, and built CLI/dylibs
+native/
+
 # Secrets & local key material — never commit API keys
 .env
 .env.*
